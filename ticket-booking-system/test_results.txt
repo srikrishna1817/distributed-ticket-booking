@@ -1,0 +1,16 @@
+﻿--- VERIFY INDIVIDUAL INSTANCES ---
+5001: Flask-5001  (Port 5001 )
+5002: Flask-5002  (Port 5002 )
+5003: Flask-5003  (Port 5003 )
+--- TEST LOAD BALANCING (/health) ---
+Req 1 handled by: Flask-5003 
+Req 2 handled by: Flask-5002 
+Req 3 handled by: Flask-5003 
+Req 4 handled by: Flask-5001 
+--- TEST API VIA NGINX (/api/matches) ---
+API Success: True - Result Count: 3 matches loaded
+--- TEST LOAD BALANCING (/instance) ---
+Req 1 handled by instance on port: 5003 
+Req 2 handled by instance on port: 5001 
+Req 3 handled by instance on port: 5002 
+Req 4 handled by instance on port: 5003 
