@@ -1,56 +1,78 @@
 import React, { useState } from 'react';
 
-function BookingForm({ selectedSeat, onBook, onCancel }) {
-  const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
+function BookingForm({ selectedSeats, currentUser, onBook, onCancel }) {
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (userName.trim() && userEmail.trim()) {
-      onBook(userName, userEmail);
-      setUserName('');
-      setUserEmail('');
-    }
+    if (!selectedSeats || selectedSeats.length === 0) return;
+    setLoading(true);
+    await onBook();
+    setLoading(false);
   };
 
+  if (!selectedSeats || selectedSeats.length === 0) return null;
+
   return (
-    <div className="card mb-4">
-      <div className="card-header">
-        <h3>Booking Details</h3>
+    <div className="app-card">
+      <div className="card-header-custom">
+        <span className="card-header-icon">🎟️</span>
+        <h3>Confirm Your Booking</h3>
       </div>
-      <div className="card-body">
+      <div className="card-body-custom">
+        {/* Selected seats as chips */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div className="form-label-custom" style={{ marginBottom: 8 }}>
+            Selected Seats ({selectedSeats.length})
+          </div>
+          <div className="seat-chips">
+            {selectedSeats.map(seat => (
+              <span key={seat.seat_id} className="seat-chip">
+                {seat.seat_number}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* User info (pre-filled, read-only) */}
+        <div className="form-label-custom" style={{ marginBottom: 8 }}>
+          Booking For
+        </div>
+        <div className="booking-user-info">
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+            <div>
+              <div className="booking-user-info-label">Name</div>
+              <div className="booking-user-info-value">{currentUser.full_name}</div>
+            </div>
+            <div>
+              <div className="booking-user-info-label">Email</div>
+              <div className="booking-user-info-value">{currentUser.email}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
         <form onSubmit={handleSubmit}>
-          <div className="mb-3">
-            <label className="form-label">
-              Selected Seat: <strong>{selectedSeat.seat_number}</strong>
-            </label>
+          <div className="booking-actions">
+            <button
+              type="submit"
+              className="btn-primary-custom"
+              disabled={loading}
+            >
+              {loading
+                ? <><span className="spinner" /> Booking…</>
+                : `🎟️ Confirm ${selectedSeats.length} Seat${selectedSeats.length > 1 ? 's' : ''}`
+              }
+            </button>
+            <button
+              type="button"
+              className="btn-secondary-custom"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              Cancel
+            </button>
           </div>
-          <div className="mb-3">
-            <label className="form-label">Name</label>
-            <input
-              type="text"
-              className="form-control"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              required
-            />
-          </div>
-          <div className="mb-3">
-            <label className="form-label">Email</label>
-            <input
-              type="email"
-              className="form-control"
-              value={userEmail}
-              onChange={(e) => setUserEmail(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" className="btn btn-primary me-2">
-            Confirm Booking
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancel
-          </button>
         </form>
       </div>
     </div>

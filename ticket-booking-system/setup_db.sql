@@ -4,7 +4,16 @@ USE ticket_booking;
 DROP TABLE IF EXISTS bookings;
 DROP TABLE IF EXISTS seats;
 DROP TABLE IF EXISTS matches;
+DROP TABLE IF EXISTS users;
 
+-- Create users table
+CREATE TABLE users (
+    user_id       INT AUTO_INCREMENT PRIMARY KEY,
+    full_name     VARCHAR(255) NOT NULL,
+    email         VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 -- Create matches table (formerly trains)
 CREATE TABLE matches (
     match_id INT AUTO_INCREMENT PRIMARY KEY,

@@ -4,20 +4,20 @@ import database as db
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend-backend communication
+app.secret_key = 'ticket_booking_secret_key_2026'
+CORS(app, supports_credentials=True, origins=["http://localhost:3000", "http://localhost:80", "http://localhost"])
 
-# Route: Home page
+# ─── Existing Routes ──────────────────────────────────────────────────────────
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Route: Health check (for load balancer)
 @app.route('/health')
 def health():
     port = os.environ.get('PORT', '5000')
     return jsonify({'status': 'healthy', 'instance': f'Flask-{port}', 'port': port}), 200
 
-# Route: Instance info (to verify load balancing is working)
 @app.route('/instance')
 def instance_info():
     port = os.environ.get('PORT', '5000')
@@ -28,7 +28,6 @@ def instance_info():
         'message': f'Request handled by Flask instance on port {port}'
     }), 200
 
-# API Route: Get all matches
 @app.route('/api/matches', methods=['GET'])
 def get_matches():
     try:
@@ -37,7 +36,6 @@ def get_matches():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-# API Route: Get available seats for a match
 @app.route('/api/seats/<int:match_id>', methods=['GET'])
 def get_seats(match_id):
     try:
@@ -46,39 +44,132 @@ def get_seats(match_id):
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-# API Route: Book a seat
 @app.route('/api/book', methods=['POST'])
 def book_seat():
     try:
         data = request.get_json()
-        
-        # Validate input
         required_fields = ['seat_id', 'user_name', 'email', 'match_id']
         for field in required_fields:
             if field not in data:
-                return jsonify({
-                    'success': False, 
-                    'message': f'Missing field: {field}'
-                }), 400
-        
-        # Book seat with transaction
+                return jsonify({'success': False, 'message': f'Missing field: {field}'}), 400
+
         result = db.book_seat_with_transaction(
             seat_id=data['seat_id'],
             user_name=data['user_name'],
             email=data['email'],
             match_id=data['match_id']
         )
+
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 409
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# ─── Upgrade 1: Authentication Endpoints ──────────────────────────────────────
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        required = ['full_name', 'email', 'password']
+        for field in required:
+            if not data or field not in data or not str(data[field]).strip():
+                return jsonify({'success': False, 'message': f'Missing field: {field}'}), 400
+
+        result = db.register_user(
+            full_name=data['full_name'].strip(),
+            email=data['email'].strip().lower(),
+            password=data['password']
+        )
+
+        if result['success']:
+            return jsonify(result), 200
+        elif result.get('code') == 'EMAIL_EXISTS':
+            return jsonify(result), 409
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        if not data or 'email' not in data or 'password' not in data:
+            return jsonify({'success': False, 'message': 'Email and password required'}), 400
+
+        result = db.login_user(
+            email=data['email'].strip().lower(),
+            password=data['password']
+        )
+
+        if result['success']:
+            return jsonify(result), 200
+        elif result.get('code') == 'WRONG_PASSWORD':
+            return jsonify(result), 401
+        else:
+            return jsonify(result), 401
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    return jsonify({'success': True, 'message': 'Logged out successfully'}), 200
+
+# ─── Upgrade 2: Multi-Seat Booking Endpoint ───────────────────────────────────
+
+@app.route('/api/book-multiple', methods=['POST'])
+def book_multiple_seats():
+    try:
+        data = request.get_json()
+        required = ['seat_ids', 'event_id', 'user_id']
+        for field in required:
+            if field not in data:
+                return jsonify({'success': False, 'message': f'Missing field: {field}'}), 400
+
+        seat_ids = data['seat_ids']
+        if not isinstance(seat_ids, list) or len(seat_ids) == 0:
+            return jsonify({'success': False, 'message': 'seat_ids must be a non-empty list'}), 400
+        if len(seat_ids) > 6:
+            return jsonify({'success': False, 'message': 'Maximum 6 seats per booking'}), 400
+
+        result = db.book_multiple_seats_with_transaction(
+            seat_ids=seat_ids,
+            match_id=data['event_id'],
+            user_id=data['user_id']
+        )
+
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 409
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/user/bookings', methods=['POST'])
+def get_bookings():
+    try:
+        data = request.get_json()
+        if not data or 'email' not in data:
+            return jsonify({'success': False, 'message': 'Email required'}), 400
+
+        result = db.get_user_bookings(data['email'])
         
         if result['success']:
             return jsonify(result), 200
         else:
-            return jsonify(result), 409  # 409 Conflict
-            
+            return jsonify(result), 400
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    # Port is configurable via PORT env variable (default: 5000)
     port = int(os.environ.get('PORT', 5000))
     print(f"[*] Starting Flask instance on port {port} (PID: {os.getpid()})")
     app.run(host='0.0.0.0', port=port, debug=False)
