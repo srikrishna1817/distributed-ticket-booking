@@ -5,7 +5,13 @@ import os
 
 app = Flask(__name__)
 app.secret_key = 'ticket_booking_secret_key_2026'
-CORS(app, supports_credentials=True, origins=["http://localhost:3000", "http://localhost:80", "http://localhost"])
+CORS(app, supports_credentials=True, origins=[
+    "https://distributed-ticket-booking.vercel.app",
+    "https://distributed-ticket-booking-git-main-krishnas-projects-3704f279.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:80",
+    "http://localhost",
+])
 
 # ─── Existing Routes ──────────────────────────────────────────────────────────
 
