@@ -1,27 +1,32 @@
-import pymysql
-from pymysql.cursors import DictCursor
+import os
+import psycopg2
+import psycopg2.extras
+from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# Database configuration
+# Load .env file for local development (no-op in production if not present)
+load_dotenv()
+
+# Database configuration — reads from environment variables with local fallbacks
 DB_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'mysqlpw',
-    'database': 'ticket_booking',
-    'port': 3307,
-    'cursorclass': DictCursor
+    'host':     os.environ.get('DB_HOST',     'localhost'),
+    'port':     int(os.environ.get('DB_PORT', 5432)),
+    'user':     os.environ.get('DB_USER',     'postgres'),
+    'password': os.environ.get('DB_PASSWORD', 'mysqlpw'),
+    'dbname':   os.environ.get('DB_NAME',     'ticket_booking'),
 }
 
 def get_db_connection():
-    """Create and return database connection"""
-    return pymysql.connect(**DB_CONFIG)
+    """Create and return a psycopg2 database connection."""
+    conn = psycopg2.connect(**DB_CONFIG)
+    return conn
 
 # ─── Existing Functions ───────────────────────────────────────────────────────
 
 def get_all_matches():
-    """Fetch all matches"""
+    """Fetch all matches."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM matches")
     matches = cursor.fetchall()
     cursor.close()
@@ -29,9 +34,9 @@ def get_all_matches():
     return matches
 
 def get_available_seats(match_id):
-    """Fetch all seats for a match with booking status"""
+    """Fetch all seats for a match with booking status."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     query = """
         SELECT seat_id, seat_number, is_booked 
         FROM seats 
@@ -50,10 +55,10 @@ def book_seat_with_transaction(seat_id, user_name, email, match_id):
     Prevents double booking.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
-        conn.begin()
+        # psycopg2 starts a transaction automatically (autocommit=False by default)
 
         cursor.execute("""
             SELECT seat_id, is_booked 
@@ -72,12 +77,14 @@ def book_seat_with_transaction(seat_id, user_name, email, match_id):
             conn.rollback()
             return {'success': False, 'message': 'Seat already booked'}
 
+        # Use RETURNING to get the new booking_id (psycopg2 has no lastrowid)
         cursor.execute("""
             INSERT INTO bookings (user_name, email, seat_id, match_id, status)
             VALUES (%s, %s, %s, %s, 'confirmed')
+            RETURNING booking_id
         """, (user_name, email, seat_id, match_id))
 
-        booking_id = cursor.lastrowid
+        booking_id = cursor.fetchone()['booking_id']
 
         cursor.execute("""
             UPDATE seats 
@@ -106,28 +113,30 @@ def book_seat_with_transaction(seat_id, user_name, email, match_id):
 def register_user(full_name, email, password):
     """Register a new user. Returns error if email already exists."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
         # Check if email already registered
         cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
         existing = cursor.fetchone()
         if existing:
+            conn.rollback()
             return {
                 'success': False,
                 'code': 'EMAIL_EXISTS',
                 'message': 'An account with this email already exists'
             }
 
-        # Hash password and insert user
+        # Hash password and insert user; RETURNING gives us the new user_id
         password_hash = generate_password_hash(password)
         cursor.execute("""
             INSERT INTO users (full_name, email, password_hash)
             VALUES (%s, %s, %s)
+            RETURNING user_id
         """, (full_name, email, password_hash))
         conn.commit()
 
-        user_id = cursor.lastrowid
+        user_id = cursor.fetchone()['user_id']
         return {
             'success': True,
             'message': 'Account created successfully',
@@ -149,7 +158,7 @@ def register_user(full_name, email, password):
 def login_user(email, password):
     """Verify credentials and return user info."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
         cursor.execute("""
@@ -198,11 +207,9 @@ def book_multiple_seats_with_transaction(seat_ids, match_id, user_id):
     If ANY seat is already booked, the entire transaction rolls back.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
-        conn.begin()
-
         # Get user info for booking records
         cursor.execute("SELECT full_name, email FROM users WHERE user_id = %s", (user_id,))
         user = cursor.fetchone()
@@ -241,15 +248,16 @@ def book_multiple_seats_with_transaction(seat_ids, match_id, user_id):
                 'failed_seats': already_booked
             }
 
-        # Book all seats
+        # Book all seats; use RETURNING to retrieve each new booking_id
         booking_ids = []
         for seat in locked_seats:
             cursor.execute("""
                 INSERT INTO bookings (user_name, email, seat_id, match_id, status)
                 VALUES (%s, %s, %s, %s, 'confirmed')
+                RETURNING booking_id
             """, (user['full_name'], user['email'], seat['seat_id'], match_id))
 
-            booking_id = cursor.lastrowid
+            booking_id = cursor.fetchone()['booking_id']
             booking_ids.append(booking_id)
 
             cursor.execute("""
@@ -281,8 +289,8 @@ def book_multiple_seats_with_transaction(seat_ids, match_id, user_id):
 def get_user_bookings(email):
     """Fetch all bookings for a specific user email, joined with match details."""
     conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
     try:
         query = """
             SELECT 
@@ -297,15 +305,17 @@ def get_user_bookings(email):
         """
         cursor.execute(query, (email,))
         bookings = cursor.fetchall()
-        
+
         # Convert datetime objects to string for JSON serialization
         for booking in bookings:
             if booking['booking_time']:
                 booking['booking_time'] = booking['booking_time'].strftime("%Y-%m-%d %H:%M:%S")
-                
+
         return {'success': True, 'bookings': bookings}
+
     except Exception as e:
         return {'success': False, 'message': f'Error: {str(e)}'}
+
     finally:
         cursor.close()
         conn.close()
