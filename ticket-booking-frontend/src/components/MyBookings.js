@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:80/api';
+const API_URL = 'https://ticket-booking-backend-1vuk.onrender.com/api';
 
 function MyBookings({ currentUser }) {
   const [bookings, setBookings] = useState([]);

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import '../App.css';
 
-const API_URL = 'http://localhost:80/api';
+const API_URL = 'https://ticket-booking-backend-1vuk.onrender.com/api';
 
 function RegisterPage({ onGoLogin }) {
   const [form, setForm] = useState({ full_name: '', email: '', password: '', confirm: '' });

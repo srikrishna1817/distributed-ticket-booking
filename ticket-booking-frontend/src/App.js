@@ -10,7 +10,7 @@ import BookingForm  from './components/BookingForm';
 import MyBookings   from './components/MyBookings';
 import { useToast } from './components/Toast';
 
-const API_URL = 'http://localhost:80/api';
+const API_URL = 'https://ticket-booking-backend-1vuk.onrender.com/api';
 
 function App() {
   // ── Auth state ────────────────────────────────────────────
