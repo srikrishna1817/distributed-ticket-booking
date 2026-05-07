@@ -1,6 +1,6 @@
 import os
-import psycopg2
-import psycopg2.extras
+import psycopg
+from psycopg.rows import dict_row
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -20,7 +20,7 @@ _RENDER_EXTERNAL_URL = (
 )
 
 def get_db_connection():
-    """Create and return a psycopg2 database connection.
+    """Create and return a psycopg (v3) database connection with dict_row factory.
 
     Connection priority:
       1. DATABASE_URL env var (Render auto-sets this for linked databases)
@@ -29,27 +29,28 @@ def get_db_connection():
     """
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
-        # Render sometimes prefixes with 'postgres://' — psycopg2 needs 'postgresql://'
+        # Render sometimes prefixes with 'postgres://' — fix to 'postgresql://'
         if database_url.startswith('postgres://'):
             database_url = database_url.replace('postgres://', 'postgresql://', 1)
-        conn = psycopg2.connect(database_url, sslmode='require')
+        conn = psycopg.connect(database_url, row_factory=dict_row, sslmode='require')
         return conn
 
     # Individual env vars (set in Render dashboard or local .env)
     db_host = os.environ.get('DB_HOST')
     if db_host:
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=db_host,
             port=int(os.environ.get('DB_PORT', 5432)),
             user=os.environ.get('DB_USER', 'postgres'),
             password=os.environ.get('DB_PASSWORD', ''),
             dbname=os.environ.get('DB_NAME', 'ticket_booking'),
+            row_factory=dict_row,
             sslmode='require'
         )
         return conn
 
     # Fallback: Render external URL (allows local dev without local PostgreSQL)
-    conn = psycopg2.connect(_RENDER_EXTERNAL_URL, sslmode='require')
+    conn = psycopg.connect(_RENDER_EXTERNAL_URL, row_factory=dict_row, sslmode='require')
     return conn
 
 # ─── Existing Functions ───────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ def get_db_connection():
 def get_all_matches():
     """Fetch all matches."""
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
     cursor.execute("SELECT * FROM matches")
     matches = cursor.fetchall()
     cursor.close()
@@ -67,7 +68,7 @@ def get_all_matches():
 def get_available_seats(match_id):
     """Fetch all seats for a match with booking status."""
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
     query = """
         SELECT seat_id, seat_number, is_booked 
         FROM seats 
@@ -86,10 +87,10 @@ def book_seat_with_transaction(seat_id, user_name, email, match_id):
     Prevents double booking.
     """
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
 
     try:
-        # psycopg2 starts a transaction automatically (autocommit=False by default)
+        # psycopg3 starts a transaction automatically (autocommit=False by default)
 
         cursor.execute("""
             SELECT seat_id, is_booked 
@@ -108,7 +109,7 @@ def book_seat_with_transaction(seat_id, user_name, email, match_id):
             conn.rollback()
             return {'success': False, 'message': 'Seat already booked'}
 
-        # Use RETURNING to get the new booking_id (psycopg2 has no lastrowid)
+        # Use RETURNING to get the new booking_id
         cursor.execute("""
             INSERT INTO bookings (user_name, email, seat_id, match_id, status)
             VALUES (%s, %s, %s, %s, 'confirmed')
@@ -144,7 +145,7 @@ def book_seat_with_transaction(seat_id, user_name, email, match_id):
 def register_user(full_name, email, password):
     """Register a new user. Returns error if email already exists."""
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
 
     try:
         # Check if email already registered
@@ -189,7 +190,7 @@ def register_user(full_name, email, password):
 def login_user(email, password):
     """Verify credentials and return user info."""
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
 
     try:
         cursor.execute("""
@@ -238,7 +239,7 @@ def book_multiple_seats_with_transaction(seat_ids, match_id, user_id):
     If ANY seat is already booked, the entire transaction rolls back.
     """
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
 
     try:
         # Get user info for booking records
@@ -320,7 +321,7 @@ def book_multiple_seats_with_transaction(seat_ids, match_id, user_id):
 def get_user_bookings(email):
     """Fetch all bookings for a specific user email, joined with match details."""
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor = conn.cursor()
 
     try:
         query = """

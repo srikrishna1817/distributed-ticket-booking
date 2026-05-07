@@ -3,8 +3,7 @@ One-time setup script: runs setup_db_postgres.sql against the Render PostgreSQL
 database and then prints row counts to verify everything is in place.
 """
 
-import psycopg2
-import psycopg2.extras
+import psycopg
 import os
 
 RENDER_DSN = (
@@ -21,8 +20,8 @@ SQL_FILE = os.path.join(os.path.dirname(__file__), "setup_db_postgres.sql")
 
 def run_setup():
     print("=== Connecting to Render PostgreSQL ===")
-    conn = psycopg2.connect(RENDER_DSN)
-    conn.autocommit = True          # DDL statements need autocommit
+    # autocommit=True needed so DDL statements (CREATE TABLE, DROP TABLE) run immediately
+    conn = psycopg.connect(RENDER_DSN, autocommit=True)
     cursor = conn.cursor()
 
     print(f"Reading {SQL_FILE} ...")
