@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -31,12 +31,7 @@ function App() {
 
   const { addToast, ToastRenderer } = useToast();
 
-  // ── Load matches once logged in ───────────────────────────
-  useEffect(() => {
-    if (currentUser) loadMatches();
-  }, [currentUser]);
-
-  const loadMatches = async () => {
+  const loadMatches = useCallback(async () => {
     setLoadingMatches(true);
     try {
       const res = await axios.get(`${API_URL}/matches`);
@@ -46,7 +41,12 @@ function App() {
     } finally {
       setLoadingMatches(false);
     }
-  };
+  }, [addToast]);
+
+  // ── Load matches once logged in ───────────────────────────
+  useEffect(() => {
+    if (currentUser) loadMatches();
+  }, [currentUser, loadMatches]);
 
   const loadSeats = async (matchId) => {
     setLoadingSeats(true);

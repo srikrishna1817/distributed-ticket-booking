@@ -84,7 +84,7 @@ function LoginPage({ onLogin, onGoRegister }) {
 
         <div className="auth-link">
           Don't have an account?{' '}
-          <a onClick={onGoRegister}>Create one →</a>
+          <button type="button" className="auth-link-btn" onClick={onGoRegister}>Create one →</button>
         </div>
       </div>
     </div>

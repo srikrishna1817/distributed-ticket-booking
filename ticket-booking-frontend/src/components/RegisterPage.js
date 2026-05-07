@@ -139,7 +139,7 @@ function RegisterPage({ onGoLogin }) {
 
         <div className="auth-link">
           Already have an account?{' '}
-          <a onClick={onGoLogin}>Sign in →</a>
+          <button type="button" className="auth-link-btn" onClick={onGoLogin}>Sign in →</button>
         </div>
       </div>
     </div>

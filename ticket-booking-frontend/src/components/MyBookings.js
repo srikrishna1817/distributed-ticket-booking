@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_URL = 'https://ticket-booking-backend-1vuk.onrender.com/api';
@@ -8,11 +8,7 @@ function MyBookings({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchBookings();
-  }, []);
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.post(`${API_URL}/user/bookings`, {
@@ -26,7 +22,11 @@ function MyBookings({ currentUser }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser.email]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
 
   if (loading) {
     return (
