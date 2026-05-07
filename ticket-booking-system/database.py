@@ -7,18 +7,49 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # Load .env file for local development (no-op in production if not present)
 load_dotenv()
 
-# Database configuration — reads from environment variables with local fallbacks
-DB_CONFIG = {
-    'host':     os.environ.get('DB_HOST',     'localhost'),
-    'port':     int(os.environ.get('DB_PORT', 5432)),
-    'user':     os.environ.get('DB_USER',     'postgres'),
-    'password': os.environ.get('DB_PASSWORD', 'mysqlpw'),
-    'dbname':   os.environ.get('DB_NAME',     'ticket_booking'),
-}
+# ─── Connection resolution (priority order) ───────────────────────────────────
+# 1. DATABASE_URL  — set automatically by Render when a PostgreSQL service is linked
+# 2. Individual DB_* env vars — set manually in Render dashboard or local .env
+# 3. Render external URL — hardcoded fallback so local dev works without local PostgreSQL
+
+_RENDER_EXTERNAL_URL = (
+    "postgresql://ticket_booking_db_p5b9_user:"
+    "tXAYRJIC5FITRGEebtFXimIfrlLGWi1Q@"
+    "dpg-d7u1c9ppo60c73e0ntr0-a.oregon-postgres.render.com:"
+    "5432/ticket_booking_db_p5b9"
+)
 
 def get_db_connection():
-    """Create and return a psycopg2 database connection."""
-    conn = psycopg2.connect(**DB_CONFIG)
+    """Create and return a psycopg2 database connection.
+
+    Connection priority:
+      1. DATABASE_URL env var (Render auto-sets this for linked databases)
+      2. Individual DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME env vars
+      3. Hardcoded Render external URL (local fallback)
+    """
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        # Render sometimes prefixes with 'postgres://' — psycopg2 needs 'postgresql://'
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        conn = psycopg2.connect(database_url, sslmode='require')
+        return conn
+
+    # Individual env vars (set in Render dashboard or local .env)
+    db_host = os.environ.get('DB_HOST')
+    if db_host:
+        conn = psycopg2.connect(
+            host=db_host,
+            port=int(os.environ.get('DB_PORT', 5432)),
+            user=os.environ.get('DB_USER', 'postgres'),
+            password=os.environ.get('DB_PASSWORD', ''),
+            dbname=os.environ.get('DB_NAME', 'ticket_booking'),
+            sslmode='require'
+        )
+        return conn
+
+    # Fallback: Render external URL (allows local dev without local PostgreSQL)
+    conn = psycopg2.connect(_RENDER_EXTERNAL_URL, sslmode='require')
     return conn
 
 # ─── Existing Functions ───────────────────────────────────────────────────────
